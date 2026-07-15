@@ -1,5 +1,7 @@
 # Multi-Agent Flight Operations CoPilot Dashboard
 
+![Flight Operations CoPilot Dashboard](linkedin_thumbnail.jpg)
+
 An airline-grade intelligent flight operations assistant and dashboard. Powered by a cooperative multi-agent system, the CoPilot processes real-time weather reports, parses en-route hazards, indexes flight manuals via RAG, and runs mathematical performance calculations.
 
 ## 🛠️ System Architecture
