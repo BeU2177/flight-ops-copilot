@@ -1,0 +1,17 @@
+# Virtual Environment
+venv/
+.venv/
+Env/
+ENV/
+
+# Local databases and cache
+data/chroma_db/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Exclude large manuals and datasets to keep repository lightweight (below GitHub limits)
+data/*.pdf
+data/*.csv
+data/*.pkl
+flight_ops_copilot.log
