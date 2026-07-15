@@ -15,3 +15,5 @@ data/*.pdf
 data/*.csv
 data/*.pkl
 flight_ops_copilot.log
+.env
+

@@ -20,3 +20,6 @@ rich
 
 joblib
 pypdf
+python-dotenv
+groq
+streamlit

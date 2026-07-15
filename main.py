@@ -20,6 +20,11 @@ Author: Aviation AI Engineering System
 
 
 import os
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 import re
 import csv
 import json
@@ -1369,6 +1374,17 @@ class LocalLLM:
     def __init__(self):
 
         self.model = settings.ollama_model
+        # Groq client integration for cloud-based demo deployment
+        self.groq_api_key = os.environ.get("GROQ_API_KEY")
+        self.groq_client = None
+        if self.groq_api_key:
+            try:
+                from groq import Groq
+                self.groq_client = Groq(api_key=self.groq_api_key)
+                self.groq_model = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+                logger.info(f"Groq API client initialized using model: {self.groq_model}")
+            except Exception as e:
+                logger.warning(f"Failed to load Groq client: {e}")
 
 
 
@@ -1381,6 +1397,20 @@ class LocalLLM:
         prompt:str
     ):
 
+        if self.groq_client:
+            try:
+                response = self.groq_client.chat.completions.create(
+                    model=self.groq_model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                )
+                return response.choices[0].message.content
+            except Exception as exc:
+                logger.warning(f"Groq API call failed: {exc}. Falling back to Ollama...")
 
         try:
 
