@@ -20,13 +20,17 @@ def test_weight_verification():
     print("--- Running Bug 4: Weight Verification Test ---")
     calc = main.FlightCalculator()
     
-    # Scenario: Overweight (83,500 kg TOW vs 79,000 kg MTOW)
-    res = calc.verify_weight_limits(zfw=58500.0, fuel=16000.0, payload=9000.0, mtow=79000.0)
+    # Scenario: Overweight (83,500 kg Taxi weight, 83,200 kg TOW vs 79,000 kg MTOW)
+    res = calc.verify_weight_limits(zfw=58500.0, fuel=16000.0, payload=9000.0, mtow=79000.0, mlw=66300.0)
+    print(f"Taxi Weight: {res['taxi_weight_kg']} kg")
     print(f"TOW: {res['takeoff_weight_kg']} kg, MTOW: {res['max_takeoff_weight_kg']} kg")
+    print(f"Emergency Landing Margin: {res['landing_margin_kg']} kg")
     print(f"Is Legal Takeoff: {res['is_legal_takeoff']}")
     print(f"Warning: {res['weight_warning']}")
     
-    assert res['takeoff_weight_kg'] == 83500.0
+    assert res['taxi_weight_kg'] == 83500.0
+    assert res['takeoff_weight_kg'] == 83200.0
+    assert res['landing_margin_kg'] == 16900.0
     assert res['is_legal_takeoff'] is False
     assert "CRITICAL WEIGHT VIOLATION" in res['weight_warning']
     print("Bug 4 test passed!")
