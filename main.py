@@ -1627,6 +1627,28 @@ class FlightCalculator:
 
         }
 
+    def verify_weight_limits(
+        self,
+        zfw: float,
+        fuel: float,
+        payload: float,
+        mtow: float = 79000.0
+    ):
+        tow = zfw + fuel + payload
+        is_legal = tow <= mtow
+        warning = ""
+        if not is_legal:
+            warning = "**CRITICAL WEIGHT VIOLATION - AIRCRAFT OVERWEIGHT FOR TAKEOFF**"
+        return {
+            "zero_fuel_weight_kg": zfw,
+            "fuel_weight_kg": fuel,
+            "payload_weight_kg": payload,
+            "takeoff_weight_kg": tow,
+            "max_takeoff_weight_kg": mtow,
+            "is_legal_takeoff": is_legal,
+            "weight_warning": warning
+        }
+
 
 
 
@@ -1835,7 +1857,46 @@ class PerformanceAgent:
 
     def run(self, query: str) -> str:
         q = query.lower()
-        if any(x in q for x in ["landing", "runway", "stop", "landing distance"]):
+        if any(x in q for x in ["weight", "mtow", "payload", "cargo", "zfw", "takeoff weight"]):
+            zfw_match = re.search(r"\b(?:zfw|zero\s*fuel\s*weight)\s*(?:of|is|=)?\s*(\d{2,6}(?:\.\d+)?)\b", q)
+            fuel_match = re.search(r"\b(?:fuel|block\s*fuel)\s*(?:of|is|=)?\s*(\d{2,6}(?:\.\d+)?)\b", q)
+            payload_match = re.search(r"\b(?:payload|cargo|passengers?)\s*(?:of|is|=)?\s*(\d{2,6}(?:\.\d+)?)\b", q)
+            mtow_match = re.search(r"\b(?:mtow|max\s*takeoff\s*weight|limit)\s*(?:of|is|=)?\s*(\d{2,6}(?:\.\d+)?)\b", q)
+            
+            tow_explicit = None
+            tow_match = re.search(r"\b(?:tow|takeoff\s*weight|calculated\s*weight)\s*(?:of|is|=)?\s*(\d{2,6}(?:\.\d+)?)\b", q)
+            if tow_match:
+                tow_explicit = float(tow_match.group(1))
+                
+            zfw = float(zfw_match.group(1)) if zfw_match else 58500.0
+            fuel = float(fuel_match.group(1)) if fuel_match else 16000.0
+            payload = float(payload_match.group(1)) if payload_match else 9000.0
+            mtow = float(mtow_match.group(1)) if mtow_match else 79000.0
+            
+            if tow_explicit is not None:
+                zfw = tow_explicit - fuel - payload
+            else:
+                all_nums = [float(x) for x in re.findall(r"\b(\d{5})\b", q)]
+                if all_nums:
+                    larger_nums = [n for n in all_nums if n > mtow]
+                    if larger_nums:
+                        tow_explicit = larger_nums[0]
+                        zfw = tow_explicit - fuel - payload
+
+            res = self.calculator.verify_weight_limits(zfw, fuel, payload, mtow)
+            warning_str = f"\n{res['weight_warning']}" if res['weight_warning'] else ""
+            return (
+                f"Weight and Balance Performance Analysis:\n"
+                f"| Parameter | Weight Value |\n"
+                f"| --- | --- |\n"
+                f"| Zero Fuel Weight (ZFW) | {res['zero_fuel_weight_kg']:.1f} kg |\n"
+                f"| Fuel Weight | {res['fuel_weight_kg']:.1f} kg |\n"
+                f"| Payload / Cargo | {res['payload_weight_kg']:.1f} kg |\n"
+                f"| **Calculated Takeoff Weight (TOW)** | **{res['takeoff_weight_kg']:.1f} kg** |\n"
+                f"| **Maximum Takeoff Weight (MTOW)** | **{res['max_takeoff_weight_kg']:.1f} kg** |\n"
+                f"- Takeoff clearance status: {'APPROVED' if res['is_legal_takeoff'] else 'REJECTED - OVERWEIGHT'}{warning_str}"
+            )
+        elif any(x in q for x in ["landing", "runway", "stop", "landing distance"]):
             weight_match = re.search(r"\b(?:weight|wt|mass)\s*(?:of\s*)?(\d+(?:\.\d+)?)\b", q)
             weight = float(weight_match.group(1)) if weight_match else 60000.0
             
@@ -1881,6 +1942,10 @@ class DecisionAgent:
 
     def classify_intent(self, query: str) -> str:
         q = query.lower()
+        # Programmatic keyword override for performance/calculator/weight queries
+        if any(x in q for x in ["weight", "mtow", "payload", "cargo", "zfw", "takeoff weight", "landing distance", "fuel burn"]):
+            return "CALCULATOR"
+            
         has_metar = bool(re.search(r"\b(?:\d{3}|VRB)\d{2}(?:G\d{2})?(?:KT|MPS)\b", query, re.I))
         
         has_weather_keywords = any(x in q for x in ["metar", "weather", "delay", "visibility", "wind", "forecast", "ceiling", "dewpoint", "spread"])
@@ -1914,17 +1979,22 @@ class DecisionAgent:
         intent = self.classify_intent(query)
         logger.info(f"DecisionAgent routed query to: {intent}")
         
+        system_instruction = "You are an Aviation Flight Operations Copilot."
         if intent == "WEATHER":
+            system_instruction = WEATHER_AGENT_SYSTEM_PROMPT
             information = self.weather_agent.run(query)
         elif intent == "RAG":
+            system_instruction = "You are an Aviation Flight Operations Copilot querying the flight crew operational manuals."
             information = self.rag_agent.run(query)
         elif intent == "CALCULATOR":
+            system_instruction = PERFORMANCE_AGENT_SYSTEM_PROMPT
             information = self.perf_agent.run(query)
         else:
             information = "No specialized tool selected."
             
         final_prompt = f"""
-You are an Aviation Flight Operations Copilot.
+System Role Instructions:
+{system_instruction}
 
 Use the operational information below. Always cite the specific source document and page/lookup details (e.g. [Source: airports.csv], [Source: B738-FCOM-Rev21-15Sep2016.pdf, Page: 45], [Source: METAR]) when using information retrieved from the manuals or databases.
 
